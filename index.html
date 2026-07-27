@@ -1096,6 +1096,37 @@
         </section>
 
         <!-- DENEMELER VIEW -->
+        <section id="yanlislar" class="view-section hide-in-focus">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
+                <h1>📖 Dijital <span class="gradient-text">Yanlış Defteri</span></h1>
+                <button class="btn btn-primary" onclick="document.getElementById('add-wrong-modal').classList.add('active')">+ Yeni Soru Ekle</button>
+            </div>
+            
+            <!-- Filtreler -->
+            <div class="glass-card" style="margin-bottom: 20px; padding: 15px; display: flex; gap: 15px; flex-wrap: wrap;">
+                <select id="filter-subject" class="form-control" style="flex: 1; min-width: 150px;" onchange="renderWrongAnswers()">
+                    <option value="all">Tüm Dersler</option>
+                    <option value="TYT Matematik">TYT Matematik</option>
+                    <option value="AYT Matematik">AYT Matematik</option>
+                    <option value="AYT Fizik">AYT Fizik</option>
+                    <option value="AYT Kimya">AYT Kimya</option>
+                    <option value="AYT Biyoloji">AYT Biyoloji</option>
+                    <option value="TYT Fen">TYT Fen</option>
+                    <option value="TYT Sosyal">TYT Sosyal</option>
+                    <option value="TYT Türkçe">TYT Türkçe</option>
+                </select>
+                <select id="filter-status" class="form-control" style="flex: 1; min-width: 150px;" onchange="renderWrongAnswers()">
+                    <option value="all">Tüm Sorular</option>
+                    <option value="active" selected>Tekrar Edilmeyenler</option>
+                    <option value="mastered">Öğrenilenler (Çözülenler)</option>
+                </select>
+            </div>
+
+            <div id="wrong-answers-container" class="grid-3">
+                <!-- JS ile doldurulacak -->
+            </div>
+        </section>
+
         <section id="denemeler" class="view-section">
             <div class="flex-between" style="margin-bottom: 30px;">
                 <h1>📝 TYT Denemeleri</h1>
@@ -3764,20 +3795,6 @@ window.addEventListener('resize', () => {
             if(document.getElementById('denemeler').classList.contains('active')) drawCharts();
             if(document.getElementById('konular').classList.contains('active')) renderDonutCharts();
             if(document.getElementById('istatistikler').classList.contains('active')) drawStatistics();
-            if(document.getElementById('istatistikler').classList.contains('active')) {
-                renderWeeklySummary();
-                renderWeakSubjects();
-            renderSR();
-            renderWeeklyChallenge();
-            renderCalendar();
-            
-            // Focus exit on ESC
-            document.addEventListener('keydown', (e) => {
-                if(e.key === 'Escape' && document.body.classList.contains('focus-mode')) {
-                    toggleFocusMode();
-                }
-            });
-            }
         });
 
         // WRONG ANSWERS LOGIC
