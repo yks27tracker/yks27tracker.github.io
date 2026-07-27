@@ -800,6 +800,50 @@
         </div>
     </div>
 
+    <div id="add-wrong-modal" class="modal-overlay">
+        <div class="glass-card" style="width: 90%; max-width: 500px; max-height: 90vh; overflow-y: auto;">
+            <h2 style="color: var(--primary); margin-bottom: 20px;">Yeni Soru Ekle</h2>
+            
+            <div class="form-group">
+                <label>Soru Fotoğrafı</label>
+                <input type="file" id="wrong-image-input" accept="image/*" class="form-control" style="padding: 10px; background: rgba(0,0,0,0.2);">
+            </div>
+            
+            <div class="form-group">
+                <label>Ders</label>
+                <select id="wrong-subject" class="form-control" style="width: 100%; padding: 12px 16px; background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 10px; color: var(--text-main);">
+                    <option value="TYT Matematik">TYT Matematik</option>
+                    <option value="AYT Matematik">AYT Matematik</option>
+                    <option value="AYT Fizik">AYT Fizik</option>
+                    <option value="AYT Kimya">AYT Kimya</option>
+                    <option value="AYT Biyoloji">AYT Biyoloji</option>
+                    <option value="TYT Fen">TYT Fen</option>
+                    <option value="TYT Sosyal">TYT Sosyal</option>
+                    <option value="TYT Türkçe">TYT Türkçe</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Zorluk Seviyesi</label>
+                <select id="wrong-difficulty" class="form-control" style="width: 100%; padding: 12px 16px; background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border); border-radius: 10px; color: var(--text-main);">
+                    <option value="Kolay">🟩 Kolay (Dikkat Hatası)</option>
+                    <option value="Orta" selected>🟨 Orta (Konu Eksiği)</option>
+                    <option value="Zor">🟥 Zor (Görmesi Zor / Yeni Nesil)</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Notlar / Doğru Çözüm Mantığı</label>
+                <textarea id="wrong-note" class="form-control" rows="3" placeholder="Bu soruda neyi kaçırdım? Doğru yaklaşım ne olmalı?"></textarea>
+            </div>
+            
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button class="btn btn-primary" id="btn-save-wrong" style="flex: 1;" onclick="saveWrongAnswer()">Kaydet (Buluta Yükle)</button>
+                <button class="btn" style="flex: 1; background: rgba(255,255,255,0.1);" onclick="document.getElementById('add-wrong-modal').classList.remove('active')">İptal</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Mobile Menu Controls -->
     <button class="mobile-menu-btn" onclick="toggleMobileMenu()">☰</button>
     <div class="mobile-overlay" id="mobile-overlay" onclick="toggleMobileMenu()"></div>
@@ -834,6 +878,10 @@
         <nav>
             <div class="nav-item active" onclick="switchView('dashboard')">📊 Dashboard</div>
             <div class="nav-item" onclick="switchView('konular')">📚 Konular</div>
+            <div class="nav-item" id="nav-yanlislar" onclick="switchView('yanlislar')">
+                <div style="font-size: 20px;">📖</div>
+                <span>Yanlış Defteri</span>
+            </div>
             <div class="nav-item" onclick="switchView('denemeler')">📝 Denemeler</div>
             <div class="nav-item" onclick="switchView('hedefler')">🎯 Hedefler</div>
             <div class="nav-item" onclick="switchView('veri')">⚙️ Veri & Ayarlar</div>
@@ -1455,7 +1503,8 @@
             badges: {},
             notes: {},
             todos: {},
-            workTime: {}
+            workTime: {},
+            wrongAnswers: []
         };
 
         // Initialize subject objects
@@ -1666,6 +1715,7 @@
             renderSR();
             renderWeeklyChallenge();
             renderCalendar();
+            renderWrongAnswers();
             
             // Focus exit on ESC
             document.addEventListener('keydown', (e) => {
@@ -1682,6 +1732,7 @@
 
         function loadData() {
             // Schema migrations
+            if(!appData.wrongAnswers) appData.wrongAnswers = [];
             if(typeof appData.xp === 'undefined') appData.xp = 0;
             if(typeof appData.level === 'undefined') appData.level = 1;
             if(!appData.goals) appData.goals = defaultData.goals;
@@ -1755,6 +1806,7 @@
             if(viewId === 'denemeler') drawCharts();
             if(viewId === 'konular') renderDonutCharts();
             if(viewId === 'istatistikler') drawStatistics();
+            if(viewId === 'yanlislar') renderWrongAnswers();
         }
 
         function toggleMobileMenu() {
@@ -3727,6 +3779,159 @@ window.addEventListener('resize', () => {
             });
             }
         });
+
+        // WRONG ANSWERS LOGIC
+        // WRONG ANSWERS LOGIC (Base64 Compression instead of Storage)
+        async function saveWrongAnswer() {
+            if(!currentUser) {
+                alert("Soru eklemek için giriş yapmış olmanız gerekir.");
+                return;
+            }
+            
+            const fileInput = document.getElementById('wrong-image-input');
+            const subject = document.getElementById('wrong-subject').value;
+            const difficulty = document.getElementById('wrong-difficulty').value;
+            const note = document.getElementById('wrong-note').value;
+            const btn = document.getElementById('btn-save-wrong');
+            
+            if (fileInput.files.length === 0) {
+                alert("Lütfen bir soru fotoğrafı seçin.");
+                return;
+            }
+
+            const file = fileInput.files[0];
+            btn.innerText = "Yükleniyor... (Lütfen bekleyin)";
+            btn.disabled = true;
+
+            // Compress image using Canvas
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = function(event) {
+                const img = new Image();
+                img.src = event.target.result;
+                img.onload = function() {
+                    const canvas = document.createElement('canvas');
+                    const MAX_WIDTH = 600;
+                    let width = img.width;
+                    let height = img.height;
+
+                    if (width > MAX_WIDTH) {
+                        height = Math.round((height * MAX_WIDTH) / width);
+                        width = MAX_WIDTH;
+                    }
+
+                    canvas.width = width;
+                    canvas.height = height;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, width, height);
+
+                    // Convert to heavily compressed JPEG (0.5 quality)
+                    const dataUrl = canvas.toDataURL('image/jpeg', 0.5);
+
+                    const newQuestion = {
+                        id: Date.now(),
+                        subject: subject,
+                        difficulty: difficulty,
+                        note: note,
+                        imageUrl: dataUrl,
+                        date: new Date().toISOString().split('T')[0],
+                        isMastered: false
+                    };
+                    
+                    appData.wrongAnswers.push(newQuestion);
+                    saveData();
+                    renderWrongAnswers();
+                    
+                    if(typeof addXp === 'function') addXp(50); 
+                    
+                    fileInput.value = "";
+                    document.getElementById('wrong-note').value = "";
+                    document.getElementById('add-wrong-modal').classList.remove('active');
+                    btn.innerText = "Kaydet (Buluta Yükle)";
+                    btn.disabled = false;
+                    alert("Soru başarıyla eklendi! (+50 XP)");
+                };
+            };
+            reader.onerror = function(error) {
+                console.log('Error reading file: ', error);
+                btn.innerText = "Kaydet (Buluta Yükle)";
+                btn.disabled = false;
+                alert("Fotoğraf okunurken hata oluştu.");
+            };
+        }
+
+        function renderWrongAnswers() {
+            const container = document.getElementById('wrong-answers-container');
+            if(!container) return;
+            
+            const filterSubj = document.getElementById('filter-subject').value;
+            const filterStatus = document.getElementById('filter-status').value;
+            
+            let filtered = appData.wrongAnswers || [];
+            
+            if(filterSubj !== 'all') filtered = filtered.filter(q => q.subject === filterSubj);
+            if(filterStatus === 'active') filtered = filtered.filter(q => !q.isMastered);
+            if(filterStatus === 'mastered') filtered = filtered.filter(q => q.isMastered);
+            
+            filtered.sort((a,b) => b.id - a.id);
+            
+            if (filtered.length === 0) {
+                container.innerHTML = `<div style="grid-column: 1/-1; text-align:center; padding: 40px; color: var(--text-muted);">Bu kriterlerde kaydedilmiş soru bulunamadı.</div>`;
+                return;
+            }
+            
+            container.innerHTML = filtered.map(q => {
+                const diffColor = q.difficulty === 'Kolay' ? 'var(--success)' : (q.difficulty === 'Zor' ? 'var(--danger)' : 'var(--warning)');
+                const bgStyle = q.isMastered ? 'opacity: 0.7;' : '';
+                
+                return `
+                <div class="glass-card" style="padding: 15px; display: flex; flex-direction: column; gap: 10px; ${bgStyle}">
+                    <div style="display:flex; justify-content:space-between; align-items:center;">
+                        <span style="font-size:12px; padding: 3px 8px; background:rgba(255,255,255,0.1); border-radius:10px;">${q.subject}</span>
+                        <span style="font-size:12px; color:${diffColor}; font-weight:bold;">${q.difficulty}</span>
+                    </div>
+                    
+                    <a href="${q.imageUrl}" target="_blank">
+                        <div style="width: 100%; height: 200px; background-image: url('${q.imageUrl}'); background-size: cover; background-position: center; border-radius: 10px; cursor: pointer; border: 1px solid var(--glass-border);"></div>
+                    </a>
+                    
+                    <div style="font-size: 14px; margin-top: 5px; flex: 1;">
+                        ${q.note ? q.note : '<i style="color:var(--text-muted)">Not eklenmedi</i>'}
+                    </div>
+                    
+                    <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 10px;">
+                        Eklendiği Tarih: ${q.date}
+                    </div>
+                    
+                    <div style="display: flex; gap: 10px;">
+                        ${!q.isMastered ? 
+                          `<button class="btn btn-small" style="flex:1; background:var(--success); font-size:12px;" onclick="toggleMasterWrongQuestion(${q.id})">✅ Öğrendim</button>` : 
+                          `<button class="btn btn-small" style="flex:1; background:rgba(255,255,255,0.1); font-size:12px;" onclick="toggleMasterWrongQuestion(${q.id})">🔄 Tekrar Çalış</button>`
+                        }
+                        <button class="btn btn-danger btn-small" style="font-size:12px;" onclick="deleteWrongQuestion(${q.id})">🗑️</button>
+                    </div>
+                </div>
+                `;
+            }).join('');
+        }
+
+        function toggleMasterWrongQuestion(id) {
+            const q = appData.wrongAnswers.find(x => x.id === id);
+            if(q) {
+                q.isMastered = !q.isMastered;
+                if(q.isMastered && typeof addXp === 'function') addXp(20);
+                saveData();
+                renderWrongAnswers();
+            }
+        }
+
+        function deleteWrongQuestion(id) {
+            if(confirm('Bu soruyu silmek istediğine emin misin?')) {
+                appData.wrongAnswers = appData.wrongAnswers.filter(x => x.id !== id);
+                saveData();
+                renderWrongAnswers();
+            }
+        }
 
         // INIT is now handled by auth listener
     </script>
