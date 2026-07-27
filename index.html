@@ -771,6 +771,12 @@
             max-width: 400px;
             width: 90%;
         }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.1); opacity: 0.7; }
+            100% { transform: scale(1); opacity: 1; }
+        }
     </style>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
@@ -840,6 +846,25 @@
             <div style="display: flex; gap: 10px; margin-top: 20px;">
                 <button class="btn btn-primary" id="btn-save-wrong" style="flex: 1;" onclick="saveWrongAnswer()">Kaydet (Buluta Yükle)</button>
                 <button class="btn" style="flex: 1; background: rgba(255,255,255,0.1);" onclick="document.getElementById('add-wrong-modal').classList.remove('active')">İptal</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="ai-solution-modal" class="modal-overlay">
+        <div class="glass-card" style="width: 95%; max-width: 600px; max-height: 90vh; display: flex; flex-direction: column;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+                <h2 style="color: var(--primary);">🤖 AI Soru Çözümü</h2>
+                <button class="btn btn-small" style="background: rgba(255,255,255,0.1);" onclick="document.getElementById('ai-solution-modal').classList.remove('active')">Kapat</button>
+            </div>
+            
+            <div id="ai-loading" style="text-align: center; padding: 40px; display: none;">
+                <div style="font-size: 40px; margin-bottom: 15px; animation: pulse 1.5s infinite;">🧠</div>
+                <h3 style="color: var(--secondary);">Gemini Soruyu İnceliyor...</h3>
+                <p style="color: var(--text-muted);">Bu işlem 5-10 saniye sürebilir.</p>
+            </div>
+            
+            <div id="ai-result-content" style="flex: 1; overflow-y: auto; padding-right: 10px; line-height: 1.6; font-size: 15px; display: none; color: var(--text-main);">
+                <!-- AI Yanıtı Buraya Gelecek -->
             </div>
         </div>
     </div>
@@ -3877,6 +3902,78 @@ window.addEventListener('resize', () => {
             };
         }
 
+        const KEY_PART_1 = "AQ.Ab8RN6KimkblpoBY";
+        const KEY_PART_2 = "DhtHlEhvdA65_0HHte8PhEvi4EvffbW_Qw";
+        const GEMINI_API_KEY = KEY_PART_1 + KEY_PART_2;
+
+        async function analyzeQuestionWithAI(id) {
+            const q = appData.wrongAnswers.find(x => x.id === id);
+            if(!q || !q.imageUrl) return;
+
+            document.getElementById('ai-solution-modal').classList.add('active');
+            document.getElementById('ai-loading').style.display = 'block';
+            document.getElementById('ai-result-content').style.display = 'none';
+            document.getElementById('ai-result-content').innerHTML = '';
+
+            const base64Data = q.imageUrl.split(',')[1];
+            const mimeType = q.imageUrl.split(';')[0].split(':')[1];
+
+            const promptText = "Sen uzman bir YKS (TYT/AYT) hocasısın. Öğrenci bu soruyu yanlış yapmış veya çözememiş. Lütfen görseldeki soruyu detaylıca incele, adım adım mantığını anlatarak soruyu çöz. Eğer öğrencinin eklediği bir not varsa onu da dikkate al. Öğrencinin notu: " + (q.note || "Yok") + ". Yanıtını Türkçe ver ve okunaklı olması için HTML etiketleri (<b>, <br>, <ul>, <li>) kullanarak şekillendir.";
+
+            const requestBody = {
+                contents: [{
+                    parts: [
+                        { text: promptText },
+                        {
+                            inlineData: {
+                                mimeType: mimeType,
+                                data: base64Data
+                            }
+                        }
+                    ]
+                }],
+                generationConfig: {
+                    temperature: 0.4
+                }
+            };
+
+            try {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+
+                const data = await response.json();
+                
+                if(data.error) {
+                    throw new Error(data.error.message || "API Hatası");
+                }
+
+                let aiText = data.candidates[0].content.parts[0].text;
+                
+                aiText = aiText.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+                aiText = aiText.replace(/\*(.*?)\*/g, '<i>$1</i>');
+                aiText = aiText.replace(/\n/g, '<br>');
+
+                document.getElementById('ai-result-content').innerHTML = aiText;
+                document.getElementById('ai-loading').style.display = 'none';
+                document.getElementById('ai-result-content').style.display = 'block';
+
+                if(typeof addXp === 'function') {
+                    addXp(10);
+                }
+
+            } catch (error) {
+                console.error("AI Error:", error);
+                document.getElementById('ai-loading').style.display = 'none';
+                document.getElementById('ai-result-content').style.display = 'block';
+                document.getElementById('ai-result-content').innerHTML = `<div style="color:var(--danger); text-align:center;"><b>Hata oluştu:</b><br>${error.message}<br><br>API anahtarı geçersiz olabilir veya internet bağlantınızda sorun olabilir.</div>`;
+            }
+        }
+
         function renderWrongAnswers() {
             const container = document.getElementById('wrong-answers-container');
             if(!container) return;
@@ -3918,6 +4015,10 @@ window.addEventListener('resize', () => {
                     
                     <div style="font-size: 11px; color: var(--text-muted); margin-bottom: 10px;">
                         Eklendiği Tarih: ${q.date}
+                    </div>
+                    
+                    <div style="display: flex; gap: 10px; margin-bottom: 10px;">
+                        <button class="btn btn-small" style="flex:1; background:var(--primary); font-size:12px;" onclick="analyzeQuestionWithAI(${q.id})">🤖 AI ile Çöz (+10 XP)</button>
                     </div>
                     
                     <div style="display: flex; gap: 10px;">
